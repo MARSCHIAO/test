@@ -1,32 +1,22 @@
-#!/bin/bash
-# 下载移动模块配置文件脚本
+#!/usr/bin/env bash
+# 下载移动模块配置（并行 + hash）
 
-set -e  # 遇到错误立即退出
+set -euo pipefail
+source "$(dirname "$0")/lib_fetch.sh"
 
-echo "📥 开始下载移动模块配置..."
+echo "📦 开始下载 Mobile 模块..."
 
-# Surfing
-echo "  ⬇️  Surfing..."
-mkdir -p "Mobile_Modules/Surfing"
-curl -s -o "Mobile_Modules/Surfing/config.yaml" \
-  "https://raw.githubusercontent.com/GitMetaio/Surfing/refs/heads/main/box_bll/clash/config.yaml"
+TASKS=$(cat <<'EOF'
+https://raw.githubusercontent.com/GitMetaio/Surfing/refs/heads/main/box_bll/clash/config.yaml|Mobile_Modules/Surfing/config.yaml
+https://raw.githubusercontent.com/akashaProxy/akashaProxy/refs/heads/master/module/src/config.example.yaml|Mobile_Modules/AkashaProxy/config.yaml
+https://raw.githubusercontent.com/AXEVO/Clash-MIX/refs/heads/Clash-MIX-4.0/Clash/Clash%E9%85%8D%E7%BD%AE.yaml|Mobile_Modules/ClashMix/config.yaml
+https://raw.githubusercontent.com/boxproxy/box/refs/heads/master/box/mihomo/config.yaml|Mobile_Modules/BoxProxy/config.yaml
+EOF
+)
 
-# AkashaProxy
-echo "  ⬇️  AkashaProxy..."
-mkdir -p "Mobile_Modules/AkashaProxy"
-curl -s -o "Mobile_Modules/AkashaProxy/config.yaml" \
-  "https://raw.githubusercontent.com/akashaProxy/akashaProxy/refs/heads/master/module/src/config.example.yaml"
+echo "$TASKS" | xargs -P 4 -n 1 bash -c '
+  IFS="|" read -r url out <<< "$0"
+  fetch_one "$url" "$out"
+'
 
-# ClashMix
-echo "  ⬇️  ClashMix..."
-mkdir -p "Mobile_Modules/ClashMix"
-curl -s -o "Mobile_Modules/ClashMix/config.yaml" \
-  "https://raw.githubusercontent.com/AXEVO/Clash-MIX/refs/heads/Clash-MIX-4.0/Clash/Clash%E9%85%8D%E7%BD%AE.yaml"
-
-# BoxProxy
-echo "  ⬇️  BoxProxy..."
-mkdir -p "Mobile_Modules/BoxProxy"
-curl -s -o "Mobile_Modules/BoxProxy/config.yaml" \
-  "https://raw.githubusercontent.com/boxproxy/box/refs/heads/master/box/mihomo/config.yaml"
-
-echo "✅ 移动模块配置下载完成"
+echo "✅ Mobile 模块处理完成"
