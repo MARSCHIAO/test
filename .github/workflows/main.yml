@@ -2,185 +2,156 @@ name: Update Configs
 
 on:
   schedule:
-    - cron: '30 22 * * *' # UTC 22:30 = 北京时间次日6:30
+    - cron: '30 22 * * *' # UTC 22:30 = 北京时间次日 06:30
   workflow_dispatch:
     inputs:
       category:
         description: '选择要更新的类别'
         required: false
         type: choice
-        options:
-          - all
-          - official
-          - general
-          - smart
-          - mobile
+        options: [all, official, general, smart, mobile]
         default: all
 
 permissions:
   contents: write
 
 jobs:
-  # ==================================================
-  # 第一阶段: 并行下载所有配置
-  # ==================================================
-  download-configs:
+  update-configs:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        category:
-          - official
-          - general
-          - smart
-          - mobile
-      fail-fast: false
-      max-parallel: 4
-    
+
     steps:
-      - name: 检查存储库
-        uses: actions/checkout@v4  # 🔧 修正: v6 不存在，改为 v4
-
-      - name: 判断是否需要执行
-        id: check_run
-        run: |
-          should_run=false
-          if [[ "${{ github.event_name }}" == "schedule" ]] || \
-             [[ "${{ github.event.inputs.category }}" == "all" ]] || \
-             [[ "${{ github.event.inputs.category }}" == "${{ matrix.category }}" ]]; then
-             should_run=true
-          fi
-          echo "should_run=$should_run" >> $GITHUB_OUTPUT
-
-      - name: 下载配置文件
-        if: steps.check_run.outputs.should_run == 'true'
-        id: download
-        run: |
-          # 根据类别设置下载路径
-          case "${{ matrix.category }}" in
-            official)
-              target_dir="Official_Examples"
-              echo "📥 下载官方示例配置..."
-              mkdir -p "$target_dir/Metacubex"
-              curl -s -o "$target_dir/Metacubex/rule-set_config.yaml" "https://wiki.metacubex.one/example/mrs"
-              curl -s -o "$target_dir/Metacubex/geox_config.yaml" "https://wiki.metacubex.one/example/geox"
-              ;;
-            
-            general)
-              target_dir="General_Config"
-              echo "📥 下载通用配置..."
-              # 只要确保 bash 脚本里有 mkdir -p General_Config/... 即可
-              # 为了保险，这里可以先创建
-              mkdir -p "$target_dir"
-              if [ -f .github/scripts/download-general.sh ]; then
-                bash .github/scripts/download-general.sh
-              else
-                # 如果没有脚本，演示用代码(请替换为实际逻辑或保留你的脚本)
-                echo "⚠️ 脚本未找到，仅创建目录示例"
-              fi
-              ;;
-            
-            smart)
-              target_dir="Smart_Mode"
-              echo "📥 下载Smart模式配置..."
-              mkdir -p "$target_dir"
-              if [ -f .github/scripts/download-smart.sh ]; then bash .github/scripts/download-smart.sh; fi
-              ;;
-            
-            mobile)
-              target_dir="Mobile_Modules"
-              echo "📥 下载移动模块配置..."
-              mkdir -p "$target_dir"
-              if [ -f .github/scripts/download-mobile.sh ]; then bash .github/scripts/download-mobile.sh; fi
-              ;;
-          esac
-          
-          # 输出给下一步
-          echo "artifact_path=$target_dir" >> $GITHUB_OUTPUT
-
-      # 上传时，Artifact 会剥离 artifact_path 这一层文件夹
-      # 例如：上传 General_Config，下载时只会得到里面的内容，General_Config 文件夹本身不包含在内
-      - name: 上传 artifact
-        uses: actions/upload-artifact@v4
-        if: steps.check_run.outputs.should_run == 'true'
-        with:
-          name: configs-${{ matrix.category }}
-          path: ${{ steps.download.outputs.artifact_path }}
-          retention-days: 1
-          if-no-files-found: ignore
-
-  # ==================================================
-  # 第二阶段: 合并所有配置 (关键修复步骤)
-  # ==================================================
-  commit-changes:
-    needs: download-configs
-    runs-on: ubuntu-latest
-    if: always()
-    
-    steps:
-      - name: 检查存储库
+      - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref }}
 
-      # 🔧 [关键修复]：显式指定每个 artifact 下载到哪个文件夹
-      # 这样可以重建目录结构，而不是全部散落在根目录
-      
-      - name: 下载 Official 配置
-        uses: actions/download-artifact@v4
-        continue-on-error: true # 防止并未运行此分类时报错
-        with:
-          name: configs-official
-          path: Official_Examples  # 👈 强制放回 Official_Examples 文件夹
-
-      - name: 下载 General 配置
-        uses: actions/download-artifact@v4
-        continue-on-error: true
-        with:
-          name: configs-general
-          path: General_Config     # 👈 强制放回 General_Config 文件夹
-
-      - name: 下载 Smart 配置
-        uses: actions/download-artifact@v4
-        continue-on-error: true
-        with:
-          name: configs-smart
-          path: Smart_Mode         # 👈 强制放回 Smart_Mode 文件夹
-
-      - name: 下载 Mobile 配置
-        uses: actions/download-artifact@v4
-        continue-on-error: true
-        with:
-          name: configs-mobile
-          path: Mobile_Modules     # 👈 强制放回 Mobile_Modules 文件夹
-
-      - name: 生成报告并提交
+      - name: Update configs (parallel + hash)
         run: |
-          echo "📝 检查目录结构..."
-          ls -R
-          
-          echo "📝 生成更新报告..."
-          report="## 配置更新报告 - $(date +'%Y-%m-%d %H:%M:%S')\n"
-          
-          # 遍历统计
+          set -euo pipefail
+
+          ########################################
+          # 基础工具函数
+          ########################################
+
+          fetch_if_changed() {
+            local url="$1"
+            local target="$2"
+
+            mkdir -p "$(dirname "$target")"
+            local tmp
+            tmp="$(mktemp)"
+
+            if ! curl -fsSL "$url" -o "$tmp"; then
+              echo "❌ 下载失败: $url"
+              rm -f "$tmp"
+              return 1
+            fi
+
+            if [ ! -f "$target" ]; then
+              mv "$tmp" "$target"
+              echo "🆕 新文件: $target"
+              return 0
+            fi
+
+            local old_hash new_hash
+            old_hash="$(sha256sum "$target" | awk '{print $1}')"
+            new_hash="$(sha256sum "$tmp" | awk '{print $1}')"
+
+            if [ "$old_hash" = "$new_hash" ]; then
+              rm -f "$tmp"
+              echo "⏭️ 未变化: $target"
+            else
+              mv "$tmp" "$target"
+              echo "🔄 已更新: $target"
+            fi
+          }
+
+          ########################################
+          # 并行调度器
+          ########################################
+
+          MAX_JOBS=4
+          running=0
+          pids=()
+
+          run_parallel() {
+            "$@" &
+            pids+=($!)
+            ((running++))
+
+            if (( running >= MAX_JOBS )); then
+              wait -n
+              ((running--))
+            fi
+          }
+
+          ########################################
+          # 分类判断
+          ########################################
+
+          should_run() {
+            local cat="$1"
+            if [[ "${{ github.event_name }}" == "schedule" ]] ||
+               [[ "${{ github.event.inputs.category || 'all' }}" == "all" ]] ||
+               [[ "${{ github.event.inputs.category || 'all' }}" == "$cat" ]]; then
+              return 0
+            fi
+            return 1
+          }
+
+          ########################################
+          # Official
+          ########################################
+
+          if should_run "official"; then
+            run_parallel fetch_if_changed \
+              "https://wiki.metacubex.one/example/mrs" \
+              "Official_Examples/Metacubex/rule-set_config.yaml"
+
+            run_parallel fetch_if_changed \
+              "https://wiki.metacubex.one/example/geox" \
+              "Official_Examples/Metacubex/geox_config.yaml"
+          fi
+
+          ########################################
+          # General / Smart / Mobile
+          # （脚本内部同样应使用 fetch_if_changed）
+          ########################################
+
+          if should_run "general" && [ -f .github/scripts/download-general.sh ]; then
+            bash .github/scripts/download-general.sh
+          fi
+
+          if should_run "smart" && [ -f .github/scripts/download-smart.sh ]; then
+            bash .github/scripts/download-smart.sh
+          fi
+
+          if should_run "mobile" && [ -f .github/scripts/download-mobile.sh ]; then
+            bash .github/scripts/download-mobile.sh
+          fi
+
+          ########################################
+          # 等待所有并行任务
+          ########################################
+
+          wait
+
+      - name: Commit only if configs changed
+        run: |
+          set -e
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # 只 add 配置目录（无噪音关键）
           for dir in Official_Examples General_Config Smart_Mode Mobile_Modules; do
             if [ -d "$dir" ]; then
-              count=$(find "$dir" -type f -name "*.yaml" | wc -l)
-              report="${report}\n### ${dir}\n- 文件数量: ${count}\n"
+              git add "$dir"
             fi
           done
-          
-          echo -e "$report" > UPDATE_REPORT.md
-          
-          # 检查是否有 Git 变更
-          if git diff --quiet; then
-            echo "✅ 没有检测到文件变更"
-          else
-            echo "🔄 检测到变更，准备提交..."
-            git config --global user.name "github-actions[bot]"
-            git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            
-            git add .
-            git commit -m "🔄 自动更新配置 [$(date +'%Y-%m-%d')]" -m "$(cat UPDATE_REPORT.md)"
-            git push origin HEAD:${{ github.ref_name }}
-            echo "✅ 推送成功"
+
+          if git diff --cached --quiet; then
+            echo "✅ 配置内容未发生变化，安静退出（无提交）"
+            exit 0
           fi
+
+          git commit -m "🔄 Update configs"
+          git push
