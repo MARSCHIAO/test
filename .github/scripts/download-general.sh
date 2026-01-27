@@ -2,7 +2,10 @@
 # 下载通用配置（并行 + hash）
 
 set -euo pipefail
-source "$(dirname "$0")/lib_fetch.sh"
+
+# 引用库 (确保路径正确)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib_fetch.sh"
 
 echo "📦 开始下载 General 配置..."
 
@@ -35,6 +38,9 @@ https://gist.githubusercontent.com/liuran001/5ca84f7def53c70b554d3f765ff86a33/ra
 https://raw.githubusercontent.com/wanswu/my-backup/refs/heads/main/clash/config.yaml|General_Config/wanswu/config.yaml
 EOF
 )
+
+# 调用并行下载 (8线程)
+run_parallel_tasks "$TASKS" 8
 
 echo "$TASKS" | xargs -P 8 -n 1 bash -c '
   IFS="|" read -r url out <<< "$0"
