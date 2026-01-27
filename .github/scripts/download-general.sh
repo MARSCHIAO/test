@@ -42,9 +42,4 @@ EOF
 # 调用并行下载 (8线程)
 run_parallel_tasks "$TASKS" 8
 
-echo "$TASKS" | xargs -P 8 -n 1 bash -c '
-  IFS="|" read -r url out <<< "$0"
-  fetch_one "$url" "$out"
-'
-
 echo "✅ General 配置处理完成"
