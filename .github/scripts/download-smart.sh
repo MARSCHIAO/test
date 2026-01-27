@@ -1,13 +1,7 @@
 #!/usr/bin/env bash
-# 下载 Smart 模式配置（并行 + hash）
+source "$(dirname "$0")/lib_fetch.sh"
 
-set -euo pipefail
-
-# 引用库 (确保路径正确)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/lib_fetch.sh"
-
-echo "📦 开始下载 Smart 配置..."
+echo "📦 Processing Smart Mode Configs..."
 
 TASKS=$(cat <<'EOF'
 https://raw.githubusercontent.com/666OS/YYDS/main/mihomo/config/OneSmartPro.yaml|Smart_Mode/666OS/OneSmart_Config.yaml
@@ -23,6 +17,4 @@ https://raw.githubusercontent.com/qichiyuhub/rule/refs/heads/main/config/mihomo/
 EOF
 )
 
-# 调用并行下载 (8线程)
-run_parallel_tasks "$TASKS" 8
-echo "✅ Smart 配置处理完成"
+run_parallel_tasks "$TASKS" 5
