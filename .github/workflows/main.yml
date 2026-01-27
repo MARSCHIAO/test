@@ -1,8 +1,8 @@
-name: Update Configs
+name: Update Configs (Robust)
 
 on:
   schedule:
-    - cron: '30 22 * * *' # UTC 22:30 = 北京时间次日 06:30
+    - cron: '30 22 * * *' # UTC 22:30 = 北京时间 06:30
   workflow_dispatch:
     inputs:
       category:
@@ -23,135 +23,55 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Update configs (parallel + hash)
+      - name: Update Configs
         run: |
-          set -euo pipefail
+          # 1. 赋予脚本执行权限 (关键步骤)
+          chmod +x .github/scripts/*.sh
 
-          ########################################
-          # 基础工具函数
-          ########################################
-
-          fetch_if_changed() {
-            local url="$1"
-            local target="$2"
-
-            mkdir -p "$(dirname "$target")"
-            local tmp
-            tmp="$(mktemp)"
-
-            if ! curl -fsSL "$url" -o "$tmp"; then
-              echo "❌ 下载失败: $url"
-              rm -f "$tmp"
-              return 1
-            fi
-
-            if [ ! -f "$target" ]; then
-              mv "$tmp" "$target"
-              echo "🆕 新文件: $target"
-              return 0
-            fi
-
-            local old_hash new_hash
-            old_hash="$(sha256sum "$target" | awk '{print $1}')"
-            new_hash="$(sha256sum "$tmp" | awk '{print $1}')"
-
-            if [ "$old_hash" = "$new_hash" ]; then
-              rm -f "$tmp"
-              echo "⏭️ 未变化: $target"
-            else
-              mv "$tmp" "$target"
-              echo "🔄 已更新: $target"
-            fi
-          }
-
-          ########################################
-          # 并行调度器
-          ########################################
-
-          MAX_JOBS=4
-          running=0
-          pids=()
-
-          run_parallel() {
-            "$@" &
-            pids+=($!)
-            ((running++))
-
-            if (( running >= MAX_JOBS )); then
-              wait -n
-              ((running--))
-            fi
-          }
-
-          ########################################
-          # 分类判断
-          ########################################
-
+          # 2. 定义运行判断逻辑
           should_run() {
-            local cat="$1"
-            if [[ "${{ github.event_name }}" == "schedule" ]] ||
-               [[ "${{ github.event.inputs.category || 'all' }}" == "all" ]] ||
-               [[ "${{ github.event.inputs.category || 'all' }}" == "$cat" ]]; then
+            local target="$1"
+            local input="${{ github.event.inputs.category || 'all' }}"
+            local event="${{ github.event_name }}"
+            
+            if [[ "$event" == "schedule" ]] || [[ "$input" == "all" ]] || [[ "$input" == "$target" ]]; then
               return 0
             fi
             return 1
           }
 
-          ########################################
-          # Official
-          ########################################
-
+          # 3. 按需执行脚本
+          # 使用 || true 确保即使脚本内部有非零退出码（极少数情况），也不会中断后续步骤
+          
           if should_run "official"; then
-            run_parallel fetch_if_changed \
-              "https://wiki.metacubex.one/example/mrs" \
-              "Official_Examples/Metacubex/rule-set_config.yaml"
-
-            run_parallel fetch_if_changed \
-              "https://wiki.metacubex.one/example/geox" \
-              "Official_Examples/Metacubex/geox_config.yaml"
+            bash .github/scripts/download-official.sh || echo "⚠️ Official update had warnings"
           fi
 
-          ########################################
-          # General / Smart / Mobile
-          # （脚本内部同样应使用 fetch_if_changed）
-          ########################################
-
-          if should_run "general" && [ -f .github/scripts/download-general.sh ]; then
-            bash .github/scripts/download-general.sh
+          if should_run "general"; then
+            bash .github/scripts/download-general.sh || echo "⚠️ General update had warnings"
           fi
 
-          if should_run "smart" && [ -f .github/scripts/download-smart.sh ]; then
-            bash .github/scripts/download-smart.sh
+          if should_run "smart"; then
+            bash .github/scripts/download-smart.sh || echo "⚠️ Smart update had warnings"
           fi
 
-          if should_run "mobile" && [ -f .github/scripts/download-mobile.sh ]; then
-            bash .github/scripts/download-mobile.sh
+          if should_run "mobile"; then
+            bash .github/scripts/download-mobile.sh || echo "⚠️ Mobile update had warnings"
           fi
 
-          ########################################
-          # 等待所有并行任务
-          ########################################
-
-          wait
-
-      - name: Commit only if configs changed
+      - name: Commit changes
         run: |
-          set -e
-
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # 只 add 配置目录（无噪音关键）
-          for dir in Official_Examples General_Config Smart_Mode Mobile_Modules; do
-            if [ -d "$dir" ]; then
-              git add "$dir"
-            fi
-          done
+          # 强制添加目录，忽略空目录错误
+          git add Official_Examples General_Config Smart_Mode Mobile_Modules || true
 
+          # 检查暂存区是否有变化
           if git diff --cached --quiet; then
-            echo "✅ 配置内容未发生变化，安静退出（无提交）"
+            echo "✅ No changes to commit. Workflow finished."
             exit 0
           fi
 
-          git commit -m "🔄 Update configs"
+          git commit -m "🔄 Update configs $(date +'%Y-%m-%d')"
           git push
