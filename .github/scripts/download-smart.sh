@@ -1,48 +1,28 @@
-#!/bin/bash
-# 下载Smart模式配置文件脚本
+#!/usr/bin/env bash
+# 下载 Smart 模式配置（并行 + hash）
 
-set -e  # 遇到错误立即退出
+set -euo pipefail
+source "$(dirname "$0")/lib_fetch.sh"
 
-echo "📥 开始下载Smart模式配置..."
+echo "📦 开始下载 Smart 配置..."
 
-# 666OS Smart系列
-echo "  ⬇️  666OS Smart..."
-mkdir -p "Smart_Mode/666OS"
-curl -s -o "Smart_Mode/666OS/OneSmart_Config.yaml" \
-  "https://raw.githubusercontent.com/666OS/YYDS/main/mihomo/config/OneSmartPro.yaml"
-curl -s -o "Smart_Mode/666OS/OneSmart_Lite_Config.yaml" \
-  "https://raw.githubusercontent.com/666OS/YYDS/main/mihomo/config/OneSmart.yaml"
+TASKS=$(cat <<'EOF'
+https://raw.githubusercontent.com/666OS/YYDS/main/mihomo/config/OneSmartPro.yaml|Smart_Mode/666OS/OneSmart_Config.yaml
+https://raw.githubusercontent.com/666OS/YYDS/main/mihomo/config/OneSmart.yaml|Smart_Mode/666OS/OneSmart_Lite_Config.yaml
+https://raw.githubusercontent.com/HenryChiao/MIHOMO_AIO/refs/heads/main/CONFIG/SMART/MihomoSmartProPlus.yaml|Smart_Mode/HenryChiao/MihomoSmartProPlus.yaml
+https://raw.githubusercontent.com/HenryChiao/MIHOMO_AIO/refs/heads/main/CONFIG/SMART/MihomoSmartAIO.yaml|Smart_Mode/HenryChiao/MihomoSmartAIO.yaml
+https://raw.githubusercontent.com/HenryChiao/MIHOMO_AIO/refs/heads/main/CONFIG/SMART/MihomoSmartProMax.yaml|Smart_Mode/HenryChiao/MihomoSmartProMax.yaml
+https://raw.githubusercontent.com/liandu2024/little/refs/heads/main/yaml/clash-fallback-smart-std.yaml|Smart_Mode/liandu2024/clash-fallback-smart-std.yaml
+https://raw.githubusercontent.com/liandu2024/little/refs/heads/main/yaml/clash-all-smart.yaml|Smart_Mode/liandu2024/clash-all-smart.yaml
+https://raw.githubusercontent.com/liandu2024/little/refs/heads/main/yaml/clash-all-fallback-smart.yaml|Smart_Mode/liandu2024/clash-all-fallback-smart.yaml
+https://raw.githubusercontent.com/echs-top/proxy/heads/main/mihomo_smart.yaml|Smart_Mode/echs-top/mihomo_smart.yaml
+https://raw.githubusercontent.com/qichiyuhub/rule/refs/heads/main/config/mihomo/AI/smart.yaml|Smart_Mode/qichiyuhub/smart.yaml
+EOF
+)
 
-# HenryChiao Smart
-echo "  ⬇️  HenryChiao Smart..."
-mkdir -p "Smart_Mode/HenryChiao"
-curl -s -o "Smart_Mode/HenryChiao/MihomoSmartProPlus.yaml" \
-  "https://raw.githubusercontent.com/HenryChiao/MIHOMO_AIO/refs/heads/main/CONFIG/SMART/MihomoSmartProPlus.yaml"
-curl -s -o "Smart_Mode/HenryChiao/MihomoSmartAIO.yaml" \
-  "https://raw.githubusercontent.com/HenryChiao/MIHOMO_AIO/refs/heads/main/CONFIG/SMART/MihomoSmartAIO.yaml"
-curl -s -o "Smart_Mode/HenryChiao/MihomoSmartProMax.yaml" \
-  "https://raw.githubusercontent.com/HenryChiao/MIHOMO_AIO/refs/heads/main/CONFIG/SMART/MihomoSmartProMax.yaml"
+echo "$TASKS" | xargs -P 6 -n 1 bash -c '
+  IFS="|" read -r url out <<< "$0"
+  fetch_one "$url" "$out"
+'
 
-# liandu2024 Smart
-echo "  ⬇️  liandu2024 Smart..."
-mkdir -p "Smart_Mode/liandu2024"
-curl -s -o "Smart_Mode/liandu2024/clash-fallback-smart-std.yaml" \
-  "https://raw.githubusercontent.com/liandu2024/little/refs/heads/main/yaml/clash-fallback-smart-std.yaml"
-curl -s -o "Smart_Mode/liandu2024/clash-all-smart.yaml" \
-  "https://raw.githubusercontent.com/liandu2024/little/refs/heads/main/yaml/clash-all-smart.yaml"
-curl -s -o "Smart_Mode/liandu2024/clash-all-fallback-smart.yaml" \
-  "https://raw.githubusercontent.com/liandu2024/little/refs/heads/main/yaml/clash-all-fallback-smart.yaml"
-
-# echs-top Smart
-echo "  ⬇️  echs-top Smart..."
-mkdir -p "Smart_Mode/echs-top"
-curl -s -o "Smart_Mode/echs-top/mihomo_smart.yaml" \
-  "https://raw.githubusercontent.com/echs-top/proxy/heads/main/mihomo_smart.yaml"
-
-# qichiyuhub Smart
-echo "  ⬇️  qichiyuhub Smart..."
-mkdir -p "Smart_Mode/qichiyuhub"
-curl -s -o "Smart_Mode/qichiyuhub/smart.yaml" \
-  "https://raw.githubusercontent.com/qichiyuhub/rule/refs/heads/main/config/mihomo/AI/smart.yaml"
-
-echo "✅ Smart模式配置下载完成"
+echo "✅ Smart 配置处理完成"
