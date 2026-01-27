@@ -2,7 +2,10 @@
 # 下载移动模块配置（并行 + hash）
 
 set -euo pipefail
-source "$(dirname "$0")/lib_fetch.sh"
+
+# 引用库 (确保路径正确)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib_fetch.sh"
 
 echo "📦 开始下载 Mobile 模块..."
 
@@ -13,10 +16,6 @@ https://raw.githubusercontent.com/AXEVO/Clash-MIX/refs/heads/Clash-MIX-4.0/Clash
 https://raw.githubusercontent.com/boxproxy/box/refs/heads/master/box/mihomo/config.yaml|Mobile_Modules/BoxProxy/config.yaml
 EOF
 )
-
-echo "$TASKS" | xargs -P 4 -n 1 bash -c '
-  IFS="|" read -r url out <<< "$0"
-  fetch_one "$url" "$out"
-'
-
+# 调用并行下载 (8线程)
+run_parallel_tasks "$TASKS" 8
 echo "✅ Mobile 模块处理完成"
