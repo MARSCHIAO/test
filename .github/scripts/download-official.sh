@@ -12,3 +12,4 @@ EOF
 )
 
 run_parallel_tasks "$TASKS" 2
+echo "✅ official 配置处理完成"
