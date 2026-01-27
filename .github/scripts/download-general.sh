@@ -1,13 +1,7 @@
 #!/usr/bin/env bash
-# 下载通用配置（并行 + hash）
+source "$(dirname "$0")/lib_fetch.sh"
 
-set -euo pipefail
-
-# 引用库 (确保路径正确)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/lib_fetch.sh"
-
-echo "📦 开始下载 General 配置..."
+echo "📦 Processing General Configs..."
 
 TASKS=$(cat <<'EOF'
 https://raw.githubusercontent.com/yiteei/Share/refs/heads/Proxy/config/redir-host.yaml|General_Config/Yiteei/redir-host_config.yaml
@@ -39,7 +33,4 @@ https://raw.githubusercontent.com/wanswu/my-backup/refs/heads/main/clash/config.
 EOF
 )
 
-# 调用并行下载 (8线程)
-run_parallel_tasks "$TASKS" 8
-
-echo "✅ General 配置处理完成"
+run_parallel_tasks "$TASKS" 6
