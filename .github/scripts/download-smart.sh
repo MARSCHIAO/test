@@ -2,7 +2,10 @@
 # 下载 Smart 模式配置（并行 + hash）
 
 set -euo pipefail
-source "$(dirname "$0")/lib_fetch.sh"
+
+# 引用库 (确保路径正确)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib_fetch.sh"
 
 echo "📦 开始下载 Smart 配置..."
 
@@ -20,9 +23,6 @@ https://raw.githubusercontent.com/qichiyuhub/rule/refs/heads/main/config/mihomo/
 EOF
 )
 
-echo "$TASKS" | xargs -P 6 -n 1 bash -c '
-  IFS="|" read -r url out <<< "$0"
-  fetch_one "$url" "$out"
-'
-
+# 调用并行下载 (8线程)
+run_parallel_tasks "$TASKS" 8
 echo "✅ Smart 配置处理完成"
