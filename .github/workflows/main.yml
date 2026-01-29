@@ -65,7 +65,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           # 强制添加目录，忽略空目录错误
-          git add THEYAMLS Official_Examples General_Config Smart_Mode Mobile_Modules || true
+          git add THEYAMLS || true
 
           # 检查暂存区是否有变化
           if git diff --cached --quiet; then
