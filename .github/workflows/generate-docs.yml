@@ -20,7 +20,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: ${{ github.ref }}
-          fetch-depth: 0 # 获取完整历史以便进行 pull/rebase 操作
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -37,17 +37,18 @@ jobs:
           import urllib.parse
           import yaml
           
-          # 防止 yaml 解析特殊 tag 报错
           yaml.add_multi_constructor("!", lambda loader, suffix, node: None, Loader=yaml.SafeLoader)
 
           REPO_URL = "https://github.com/${{ github.repository }}/blob/main"
+          # 修改：YAML 源目录映射到 THEYAMLS
           DIR_MAP = {
-              "Official_Examples": "Mihomo 官方示例 (Official)",
-              "General_Config": "通用进阶配置 (General Config)",
-              "Smart_Mode": "Smart 模式 / 路由专用 (Smart Mode)",
-              "Mobile_Modules": "Android 手机模块 (Mobile Modules)"
+              "THEYAMLS/Official_Examples": "Mihomo 官方示例 (Official)",
+              "THEYAMLS/General_Config": "通用进阶配置 (General Config)",
+              "THEYAMLS/Smart_Mode": "Smart 模式 / 路由专用 (Smart Mode)",
+              "THEYAMLS/Mobile_Modules": "Android 手机模块 (Mobile Modules)"
           }
-          IGNORE_DIRS = [".git", ".github", "Overwrite", "OpenClash_Overview"]
+          # 忽略 Overwrite 目录，避免扫描 THEINI/THEOPENCLASH 中的非 YAML 文件
+          IGNORE_DIRS = [".git", ".github", "Overwrite"]
           IGNORE_FILES = ["README.md", "LICENSE", "release_body.md"]
 
           def safe_get(data, keys, default="N/A"):
@@ -188,8 +189,9 @@ jobs:
 
           def generate_readme(root_path, files):
               rel_path = os.path.relpath(root_path, ".")
-              folder_name = os.path.basename(root_path)
-              title = DIR_MAP.get(folder_name, folder_name)
+              # 提取 THEYAMLS/Category 后面的部分作为标题映射
+              folder_name = rel_path  # 例如 THEYAMLS/Official_Examples
+              title = DIR_MAP.get(folder_name, os.path.basename(root_path))
 
               configs_data = {} 
               
@@ -271,16 +273,17 @@ jobs:
               return "\n".join(content)
 
           print("Starting README generation...")
-          for root, dirs, files in os.walk("."):
-              dirs[:] = [d for d in dirs if d not in IGNORE_DIRS]
-              rel_path = os.path.relpath(root, ".")
-              if rel_path == ".": continue
-              
-              if any(f.endswith((".yaml", ".yml")) for f in files if f not in IGNORE_FILES):
-                  readme_txt = generate_readme(root, files)
-                  with open(os.path.join(root, "README.md"), "w", encoding="utf-8") as f:
-                      f.write(readme_txt)
-                  print(f"Generated: {rel_path}/README.md")
+          # 扫描 THEYAMLS 下的直接子目录
+          if os.path.exists("THEYAMLS"):
+              for category in os.listdir("THEYAMLS"):
+                  category_path = os.path.join("THEYAMLS", category)
+                  if os.path.isdir(category_path):
+                      files = os.listdir(category_path)
+                      if any(f.endswith((".yaml", ".yml")) for f in files):
+                          readme_txt = generate_readme(category_path, files)
+                          with open(os.path.join(category_path, "README.md"), "w", encoding="utf-8") as f:
+                              f.write(readme_txt)
+                          print(f"Generated: THEYAMLS/{category}/README.md")
           PYTHON_SCRIPT
 
       - name: Generate OpenClash Configs
@@ -288,16 +291,18 @@ jobs:
           python3 << 'PYTHON_SCRIPT'
           import os
           import yaml
-          import re
           from urllib.parse import quote
 
+          # 修改：源目录改为 THEYAMLS 下的分类
+          SOURCE_BASE = "THEYAMLS"
           SOURCE_DIRS = [
-              "Official_Examples",
-              "General_Config", 
-              "Smart_Mode",
-              "Mobile_Modules"
+              "THEYAMLS/Official_Examples",
+              "THEYAMLS/General_Config", 
+              "THEYAMLS/Smart_Mode",
+              "THEYAMLS/Mobile_Modules"
           ]
-          OUTPUT_BASE = "OpenClash_Overview"
+          # 修改：输出到 Overwrite/THEOPENCLASH
+          OUTPUT_BASE = "Overwrite/THEOPENCLASH"
           GITHUB_REPO = "${{ github.repository }}"
           REPO_RAW_BASE = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main"
           IGNORE_FILES = ["README.md", "LICENSE", "release_body.md"]
@@ -338,9 +343,6 @@ jobs:
               lines.append("[General]")
               lines.append("DISABLE_UDP_QUIC = 1")
               lines.append("")
-              lines.append("# restart: true=restart plugin after update, false=not restart")
-              lines.append("# force: true=force download, false=not force (auto download if not exists)")
-              lines.append("# cron: standard cron expression, 0=disable scheduled download")
               lines.append(f"DOWNLOAD_FILE = url={raw_url}, path=/etc/openclash/config/{filename}, cron=0 6 * * *, force=false")
               lines.append("")
               lines.append(f"CONFIG_FILE = /etc/openclash/config/{filename}")
@@ -389,8 +391,12 @@ jobs:
                               total_skipped += 1
                               continue
                           
-                          rel_path = os.path.relpath(root, ".")
-                          raw_url = f"{REPO_RAW_BASE}/{rel_path.replace(os.sep, '/')}/{quote(filename)}"
+                          # 计算相对路径 (相对于 THEYAMLS)
+                          rel_path = os.path.relpath(root, SOURCE_BASE)
+                          # 构建 Raw URL (指向 THEYAMLS)
+                          raw_url = f"{REPO_RAW_BASE}/{SOURCE_BASE}/{rel_path.replace(os.sep, '/')}/{quote(filename)}"
+                          
+                          # 输出路径保持原分类结构
                           output_dir = os.path.join(OUTPUT_BASE, rel_path)
                           os.makedirs(output_dir, exist_ok=True)
                           
@@ -418,7 +424,8 @@ jobs:
           python3 << 'PYTHON_SCRIPT'
           import os
           
-          OUTPUT_BASE = "OpenClash_Overview"
+          # 修改：基础路径改为 Overwrite/THEOPENCLASH
+          OUTPUT_BASE = "Overwrite/THEOPENCLASH"
           CATEGORY_DESC = {
               "Official_Examples": "Mihomo Official Examples",
               "General_Config": "General Configs - For daily use",
@@ -475,7 +482,7 @@ jobs:
               main_lines = []
               main_lines.append("# 📦 OpenClash Overwrite Configurations")
               main_lines.append("")
-              main_lines.append("> 🤖 **Auto-generated** from main repository configs")
+              main_lines.append("> 🤖 **Auto-generated** from THEYAMLS repository configs")
               main_lines.append("")
               main_lines.append("## 📂 Categories")
               main_lines.append("")
@@ -494,11 +501,11 @@ jobs:
               main_lines.append("3. Add to OpenClash Config Subscribe")
               main_lines.append("4. Set environment variables and apply")
               main_lines.append("")
-              main_lines.append("[🏠 Back to Project](../README.md)")
+              main_lines.append("[🏠 Back to Project](../../README.md)")
               
               main_readme = os.path.join(OUTPUT_BASE, "README.md")
               with open(main_readme, "w", encoding="utf-8") as f:
-                  f.write("\n".join(main_lines))
+                  f.write("\n".join(main_readme))
               print(f"✅ Generated main README: {main_readme}")
           PYTHON_SCRIPT
 
@@ -507,21 +514,12 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
           
-          # 1. 暂存所有更改 (解决 pathspec 错误，自动处理新文件和修改的文件)
           git add .
-          
-          # 2. 检查是否有更改，如果没有则退出，避免空提交报错
           if git diff --staged --quiet; then
             echo "✅ No changes detected. Exiting."
             exit 0
           fi
           
-          # 3. 提交
           git commit -m "🤖 Auto: Generate docs & OpenClash configs $(date +'%Y-%m-%d')"
-          
-          # 4. 拉取远程最新更改并变基 (解决 push rejected 错误)
-          # 注意：需要 git pull --rebase 避免产生 merge commit
           git pull origin ${{ github.ref_name }} --rebase --autostash
-          
-          # 5. 推送
           git push origin HEAD:${{ github.ref_name }}
