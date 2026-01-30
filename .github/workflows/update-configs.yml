@@ -61,6 +61,7 @@ jobs:
             bash .github/scripts/download-mobile.sh || echo "⚠️ Mobile update had warnings"
           fi
 
+          # 这里的 download-ini.sh 会将文件下载到 Overwrite/THEINI
           if should_run "ini"; then
             bash .github/scripts/download-ini.sh || echo "⚠️ INI update had warnings"
           fi
@@ -70,7 +71,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # 强制添加所有相关目录
+          # 强制添加 THEYAMLS 和 Overwrite 目录 (包含 THEINI 和 THEOPENCLASH)
           git add THEYAMLS Overwrite || true
 
           # 检查暂存区是否有变化
