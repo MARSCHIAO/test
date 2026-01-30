@@ -1,4 +1,4 @@
-name: Generate Documentation
+Name: Generate Documentation
 
 on:
   workflow_run:
@@ -20,6 +20,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: ${{ github.ref }}
+          fetch-depth: 0 # 获取完整历史以便进行 pull/rebase 操作
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -36,6 +37,7 @@ jobs:
           import urllib.parse
           import yaml
           
+          # 防止 yaml 解析特殊 tag 报错
           yaml.add_multi_constructor("!", lambda loader, suffix, node: None, Loader=yaml.SafeLoader)
 
           REPO_URL = "https://github.com/${{ github.repository }}/blob/main"
@@ -505,6 +507,21 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
           
-          git add */**/README.md OpenClash_Overview/ || true
-          git commit -m "🤖 Auto: Generate docs & OpenClash configs $(date +'%Y-%m-%d')" || echo "No changes"
+          # 1. 暂存所有更改 (解决 pathspec 错误，自动处理新文件和修改的文件)
+          git add .
+          
+          # 2. 检查是否有更改，如果没有则退出，避免空提交报错
+          if git diff --staged --quiet; then
+            echo "✅ No changes detected. Exiting."
+            exit 0
+          fi
+          
+          # 3. 提交
+          git commit -m "🤖 Auto: Generate docs & OpenClash configs $(date +'%Y-%m-%d')"
+          
+          # 4. 拉取远程最新更改并变基 (解决 push rejected 错误)
+          # 注意：需要 git pull --rebase 避免产生 merge commit
+          git pull origin ${{ github.ref_name }} --rebase --autostash
+          
+          # 5. 推送
           git push origin HEAD:${{ github.ref_name }}
