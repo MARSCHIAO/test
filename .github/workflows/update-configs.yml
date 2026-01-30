@@ -71,7 +71,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           # 强制添加所有相关目录
-          git add Official_Examples General_Config Smart_Mode Mobile_Modules Overwrite || true
+          git add THEYAMLS Overwrite || true
 
           # 检查暂存区是否有变化
           if git diff --cached --quiet; then
