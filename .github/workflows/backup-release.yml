@@ -1,0 +1,117 @@
+name: Backup & Release
+
+on:
+  workflow_run:
+    workflows: ["Generate Documentation"]
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Prepare Timestamp
+        run: echo "TIMESTAMP=$(date +'%Y-%m-%d_%H-%M')" >> $GITHUB_ENV
+
+      - name: Generate Manifest and Archive
+        run: |
+          python3 << 'PYTHON_SCRIPT'
+          import os
+
+          timestamp = "${{ env.TIMESTAMP }}"
+          CATEGORY_MAP = {
+              "Official_Examples": "Mihomo Official Examples",
+              "General_Config": "General Configs",
+              "Smart_Mode": "Smart Mode / Router",
+              "Mobile_Modules": "Android Modules",
+              "Overwrite": "INI Overwrite Configs",
+              "OpenClash_Overview": "OpenClash Overwrites"
+          }
+
+          lines = []
+          lines.append(f"## 📦 Auto Backup")
+          lines.append(f"> 🕒 **Time:** {timestamp}")
+          lines.append(f"> 💾 **Note:** This release contains the latest configs from all categories.\n")
+
+          def get_size_str(path):
+              try:
+                  size = os.path.getsize(path)
+                  if size < 1024: return f"{size} B"
+                  return f"{size/1024:.1f} KB"
+              except: return "N/A"
+
+          for folder, title in CATEGORY_MAP.items():
+              if not os.path.exists(folder): continue
+              
+              lines.append(f"### 📂 {title}")
+              lines.append("| Path | Size |")
+              lines.append("| :--- | :--- |")
+              
+              has_files = False
+              for root, dirs, files in os.walk(folder):
+                  for file in sorted(files):
+                      if file == "README.md" or file.startswith("."): continue
+                      full_path = os.path.join(root, file)
+                      rel_path = os.path.relpath(full_path, folder)
+                      size = get_size_str(full_path)
+                      lines.append(f"| `{rel_path}` | {size} |")
+                      has_files = True
+              
+              if not has_files:
+                  lines = lines[:-2]  # Remove headers if empty
+                  lines.append("_Empty_")
+              
+              lines.append("")
+
+          with open("release_body.md", "w", encoding="utf-8") as f:
+              f.write("\n".join(lines))
+          PYTHON_SCRIPT
+
+          sudo apt-get install -y zip
+          # Exclude git dirs, READMEs, and release_body itself
+          zip -r "Config_Backup_${{ env.TIMESTAMP }}.zip" . \
+            -x ".git/*" ".github/*" "*/README.md" "README.md" "release_body.md" \
+            -x "*.zip" "*.md"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "backup-${{ env.TIMESTAMP }}"
+          name: "📅 Auto Backup: ${{ env.TIMESTAMP }}"
+          body_path: release_body.md
+          files: Config_Backup_${{ env.TIMESTAMP }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  cleanup:
+    runs-on: ubuntu-latest
+    needs: release
+    if: always()  # Run even if release fails, but check success in steps if needed
+    steps:
+      - name: Delete workflow runs (keep last 1)
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          retain_days: 0
+          keep_minimum_runs: 1
+          delete_workflow_pattern: |
+            Update Configs
+            Generate Documentation
+            Backup & Release
+
