@@ -128,6 +128,7 @@ urls=(
 )
 
 # 构建任务列表 (url|output_path)
+# 将输出路径改为 Overwrite/THEINI
 TASKS=""
 for url in "${urls[@]}"; do
   # 自动分类
@@ -147,23 +148,29 @@ for url in "${urls[@]}"; do
   fi
   
   filename=$(basename "$url")
-  output="Overwrite/$category/$author/$filename"
+  # 关键修改：路径指向 Overwrite/THEINI
+  output="Overwrite/THEINI/$category/$author/$filename"
   TASKS+="$url|$output"$'\n'
 done
 
 # 执行并行下载 (6线程)
 run_parallel_tasks "$TASKS" 6
 
-# 生成 Overwrite 目录的 README
-echo "📝 Generating Overwrite README..."
-cd Overwrite || exit 0
-echo "# 📂 Overwrite Config Collection" > README.md
+# 生成 Overwrite/THEINI 目录的 README
+echo "📝 Generating THEINI README..."
+# 确保目录存在，否则进入失败
+mkdir -p Overwrite/THEINI
+cd Overwrite/THEINI || exit 0
+
+echo "# 📂 INI Config Collection (THEINI)" > README.md
 echo "" >> README.md
 echo "Last Updated: $(date "+%Y-%m-%d %H:%M:%S") (Beijing Time)" >> README.md
 echo "" >> README.md
 echo "## 📊 File Structure" >> README.md
 echo "" >> README.md
 echo "\`\`\`text" >> README.md
+# 生成当前目录树
 tree -L 3 --dirsfirst -I 'README.md' --charset=utf-8 >> README.md
 echo "\`\`\`" >> README.md
-cd ..
+
+cd ../..
